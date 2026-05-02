@@ -1,0 +1,6 @@
+{
+  "name": "AI Nepal",
+  "description": "Sasto ra Ramro – Sabai AI ekai thau bata. A full-stack AI SaaS platform for Nepal featuring text, image, and code generation with native payment integrations.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["AI Chat", "Image Generation", "Admin Dashboard", "Subscription Management"]
+}
