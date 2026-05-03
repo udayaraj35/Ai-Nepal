@@ -29,12 +29,14 @@ interface AIModel {
   createdAt: string;
 }
 
-export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | 'users' | 'settings' | 'models' }) {
+export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | 'users' | 'settings' | 'models' | 'payments' }) {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [users, setUsers] = useState<PlatformUser[]>([]);
   const [models, setModels] = useState<AIModel[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'analysis' | 'users' | 'settings' | 'models'>(initialTab || 'analysis');
+  const [activeTab, setActiveTab] = useState<'analysis' | 'users' | 'settings' | 'models' | 'payments'>(initialTab || 'analysis');
 
   useEffect(() => {
     if (initialTab) {
@@ -53,13 +55,17 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
     logo: string;
     description: string;
     status: 'active' | 'inactive';
+    apiKey?: string;
+    apiEndpoint?: string;
   }>({
     provider: '',
     name: '',
     version: '',
     logo: '',
     description: '',
-    status: 'active'
+    status: 'active',
+    apiKey: '',
+    apiEndpoint: ''
   });
 
   const fetchUsers = async () => {
@@ -88,9 +94,21 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
     }
   };
 
+  const fetchPayments = async () => {
+    try {
+      const txRes = await fetch('/api/admin/transactions');
+      if (txRes.ok) setTransactions(await txRes.json());
+      const methodRes = await fetch('/api/payment-methods');
+      if (methodRes.ok) setPaymentMethods(await methodRes.json());
+    } catch (error) {
+      console.error("Failed to fetch payments", error);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchModels();
+    fetchPayments();
   }, []);
 
   const handleModelSubmit = async (e: React.FormEvent) => {
@@ -109,7 +127,7 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
         fetchModels();
         setIsModelModalOpen(false);
         setEditingModel(null);
-        setModelForm({ provider: '', name: '', version: '', logo: '', description: '', status: 'active' });
+        setModelForm({ provider: '', name: '', version: '', logo: '', description: '', status: 'active', apiKey: '', apiEndpoint: '' });
       }
     } catch (error) {
       console.error("Failed to save model", error);
@@ -139,6 +157,59 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
       }
     } catch (error) {
       console.error("Failed to update role", error);
+    }
+  };
+
+  const updateTransactionStatus = async (id: string, status: string) => {
+    try {
+      const res = await fetch(`/api/admin/transactions/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) fetchPayments();
+    } catch (error) {
+      console.error("Failed to update transaction", error);
+    }
+  };
+
+  const savePaymentMethod = async (method: any) => {
+    try {
+      const res = await fetch(`/api/admin/payment-methods/${method.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(method),
+      });
+      if (res.ok) fetchPayments();
+    } catch (error) {
+      console.error("Failed to save payment method", error);
+    }
+  };
+
+  const createManualMethod = async () => {
+    const name = prompt("Enter new payment method name (e.g. Nabil Bank, IME Pay Manual):");
+    if (!name) return;
+    try {
+      const res = await fetch(`/api/admin/payment-methods`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) fetchPayments();
+    } catch (error) {
+      console.error("Failed to create payment method", error);
+    }
+  };
+
+  const deletePaymentMethod = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this payment method?")) return;
+    try {
+      const res = await fetch(`/api/admin/payment-methods/${id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) fetchPayments();
+    } catch (error) {
+      console.error("Failed to delete payment method", error);
     }
   };
 
@@ -197,7 +268,7 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
 
         {/* Navigation Tabs */}
         <div className="flex items-center gap-2 p-1.5 bg-white border border-slate-200 rounded-2xl w-fit">
-          {(['analysis', 'users', 'models', 'settings'] as const).map(tab => (
+          {(['analysis', 'users', 'models', 'settings', 'payments'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -382,7 +453,7 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
                 <button 
                   onClick={() => {
                     setEditingModel(null);
-                    setModelForm({ provider: '', name: '', version: '', logo: '', description: '', status: 'active' });
+                    setModelForm({ provider: '', name: '', version: '', logo: '', description: '', status: 'active', apiKey: '', apiEndpoint: '' });
                     setIsModelModalOpen(true);
                   }}
                   className="flex items-center gap-2 px-6 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:scale-105 transition-transform shadow-xl shadow-slate-900/20"
@@ -462,9 +533,34 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
                       <h3 className="text-3xl font-bold text-slate-900 mb-2">
                         {editingModel ? 'Update Model' : 'Register AI Model'}
                       </h3>
-                      <p className="text-slate-500 font-medium mb-8">Enter detailed specs for platform orchestration.</p>
+                      <p className="text-slate-500 font-medium mb-6">Enter detailed specs or choose from presets.</p>
                       
-                      <form onSubmit={handleModelSubmit} className="space-y-6">
+                      {!editingModel && (
+                        <div className="mb-6">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1 mb-2 block">Quick Presets</label>
+                          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                            {[
+                              { provider: 'Google', name: 'Gemini 1.5 Pro', version: '1.5.0', description: 'Google\'s most capable model.', logo: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg', apiKey: '', apiEndpoint: '' },
+                              { provider: 'Google', name: 'Gemini 1.5 Flash', version: '1.5.0', description: 'Fast and versatile model for scaling.', logo: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg', apiKey: '', apiEndpoint: '' },
+                              { provider: 'OpenAI', name: 'GPT-4o', version: 'Omni', description: 'OpenAI\'s flagship multimodal model.', logo: 'https://upload.wikimedia.org/wikipedia/commons/4/4d/OpenAI_Logo.svg', apiKey: '', apiEndpoint: 'https://api.openai.com/v1' },
+                              { provider: 'Anthropic', name: 'Claude 3.5 Sonnet', version: '3.5.0', description: 'Anthropic\'s most intelligent model.', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/78/Anthropic_logo.svg/1024px-Anthropic_logo.svg.png', apiKey: '', apiEndpoint: 'https://api.anthropic.com/v1' },
+                              { provider: 'Meta', name: 'Llama 3', version: '70B', description: 'Meta\'s fast open-source model.', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Meta-Logo.png/1024px-Meta-Logo.png', apiKey: '', apiEndpoint: '' }
+                            ].map((preset, idx) => (
+                              <button 
+                                key={idx} 
+                                type="button"
+                                onClick={() => setModelForm({ ...modelForm, ...preset, status: 'active' })}
+                                className="flex-shrink-0 flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 hover:border-nepal-blue transition-all"
+                              >
+                                {preset.logo && <img src={preset.logo} alt={preset.name} className="w-4 h-4 object-contain" />}
+                                <span className="text-xs font-bold text-slate-700">{preset.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <form onSubmit={handleModelSubmit} className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
                         <div className="grid grid-cols-2 gap-4">
                            <div className="space-y-2">
                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Company/Provider</label>
@@ -473,7 +569,7 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
                                 value={modelForm.provider}
                                 onChange={(e) => setModelForm({...modelForm, provider: e.target.value})}
                                 placeholder="Google, OpenAI..."
-                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-slate-100 transition-all"
+                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-slate-100 transition-all text-sm"
                               />
                            </div>
                            <div className="space-y-2">
@@ -483,7 +579,7 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
                                 value={modelForm.name}
                                 onChange={(e) => setModelForm({...modelForm, name: e.target.value})}
                                 placeholder="Gemini-2, GPT-4..."
-                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-slate-100 transition-all"
+                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-slate-100 transition-all text-sm"
                               />
                            </div>
                         </div>
@@ -496,7 +592,7 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
                                 value={modelForm.version}
                                 onChange={(e) => setModelForm({...modelForm, version: e.target.value})}
                                 placeholder="2.0-Flash..."
-                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-slate-100 transition-all font-mono"
+                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-slate-100 transition-all font-mono text-sm"
                               />
                            </div>
                            <div className="space-y-2">
@@ -504,12 +600,35 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
                               <select 
                                 value={modelForm.status}
                                 onChange={(e) => setModelForm({...modelForm, status: e.target.value as 'active' | 'inactive'})}
-                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-slate-100 transition-all appearance-none"
+                                className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-slate-100 transition-all appearance-none text-sm"
                               >
                                 <option value="active">Operational</option>
                                 <option value="inactive">Suspended</option>
                               </select>
                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 bg-blue-50/50 p-4 rounded-3xl border border-blue-100/50">
+                          <h4 className="text-xs font-bold text-nepal-blue uppercase tracking-widest px-1">API Integration Config</h4>
+                          <div className="space-y-2">
+                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">API Key (Leave empty to use env)</label>
+                             <input 
+                               type="password"
+                               value={modelForm.apiKey || ''}
+                               onChange={(e) => setModelForm({...modelForm, apiKey: e.target.value})}
+                               placeholder="sk-..."
+                               className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all font-mono text-sm"
+                             />
+                          </div>
+                          <div className="space-y-2">
+                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">API Endpoint (Optional)</label>
+                             <input 
+                               value={modelForm.apiEndpoint || ''}
+                               onChange={(e) => setModelForm({...modelForm, apiEndpoint: e.target.value})}
+                               placeholder="https://api.openai.com/v1..."
+                               className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all font-mono text-sm"
+                             />
+                          </div>
                         </div>
 
                         <div className="space-y-2">
@@ -518,7 +637,7 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
                              value={modelForm.logo}
                              onChange={(e) => setModelForm({...modelForm, logo: e.target.value})}
                              placeholder="https://icon-library.com..."
-                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-slate-100 transition-all"
+                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-slate-100 transition-all text-sm"
                            />
                         </div>
 
@@ -528,21 +647,21 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
                              value={modelForm.description}
                              onChange={(e) => setModelForm({...modelForm, description: e.target.value})}
                              placeholder="Fast reasoning, high context window..."
-                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-slate-100 transition-all h-24 resize-none"
+                             className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold outline-none focus:ring-4 focus:ring-slate-100 transition-all h-20 resize-none text-sm"
                            />
                         </div>
 
-                        <div className="flex gap-4 pt-4">
+                        <div className="flex gap-4 pt-4 sticky bottom-0 bg-white pb-2">
                            <button 
                              type="button"
                              onClick={() => setIsModelModalOpen(false)}
-                             className="flex-1 py-4 bg-slate-50 text-slate-400 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-100 transition-all"
+                             className="flex-1 py-4 bg-slate-50 text-slate-400 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-100 transition-all text-sm"
                            >
                               Cancel
                            </button>
                            <button 
                              type="submit"
-                             className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-slate-900/20 hover:scale-105 transition-all"
+                             className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-slate-900/20 hover:scale-105 transition-all text-sm"
                            >
                               {editingModel ? 'Update Specs' : 'Deploy Model'}
                            </button>
@@ -552,6 +671,207 @@ export default function AdminPanel({ initialTab }: { initialTab?: 'analysis' | '
                   </div>
                 )}
               </AnimatePresence>
+            </motion.div>
+          )}
+
+          {activeTab === 'payments' && (
+            <motion.div 
+              key="payments"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-10"
+            >
+              {/* Payment Methods Configuration */}
+              <div className="bg-white border border-slate-200 rounded-[48px] p-10 shadow-2xl">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-2xl font-bold text-slate-900">Payment Methods Configuration</h2>
+                  <button 
+                    onClick={createManualMethod}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all shadow-md active:scale-95 flex items-center gap-2"
+                  >
+                    + Add Custom Method
+                  </button>
+                </div>
+                
+                {/* API Integrations */}
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">API Gateways (Auto-Verification)</h3>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-12">
+                  {paymentMethods.filter((m: any) => m.type === 'integration').map(method => (
+                    <div key={method.id} className="p-6 bg-slate-50 border border-slate-200 rounded-3xl relative">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-bold text-lg text-slate-800">{method.name}</h4>
+                        <button 
+                          onClick={() => savePaymentMethod({ ...method, isActive: !method.isActive })}
+                          className={cn("px-3 py-1 rounded-full text-xs font-bold transition-all", method.isActive ? "bg-nepal-green/10 text-nepal-green" : "bg-slate-200 text-slate-500")}
+                        >
+                          {method.isActive ? 'Active' : 'Disabled'}
+                        </button>
+                      </div>
+                      <div className="space-y-4">
+                        {method.merchantCode !== undefined && (
+                          <div>
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Merchant Code / ID</label>
+                            <input 
+                              value={method.merchantCode}
+                              onChange={(e) => {
+                                const updated = paymentMethods.map(m => m.id === method.id ? { ...m, merchantCode: e.target.value } : m);
+                                setPaymentMethods(updated);
+                              }}
+                              onBlur={(e) => savePaymentMethod({ ...method, merchantCode: e.target.value })}
+                              className="mt-1 w-full p-3 rounded-xl border border-slate-200 text-sm font-mono"
+                              placeholder="Required for integration"
+                            />
+                          </div>
+                        )}
+                        {method.publicKey !== undefined && (
+                          <div>
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Public Key</label>
+                            <input 
+                              value={method.publicKey}
+                              onChange={(e) => {
+                                const updated = paymentMethods.map(m => m.id === method.id ? { ...m, publicKey: e.target.value } : m);
+                                setPaymentMethods(updated);
+                              }}
+                              onBlur={(e) => savePaymentMethod({ ...method, publicKey: e.target.value })}
+                              className="mt-1 w-full p-3 rounded-xl border border-slate-200 text-sm font-mono"
+                            />
+                          </div>
+                        )}
+                        {method.secretKey !== undefined && (
+                          <div>
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Secret Key / Live Secret</label>
+                            <input 
+                              type="password"
+                              value={method.secretKey}
+                              onChange={(e) => {
+                                const updated = paymentMethods.map(m => m.id === method.id ? { ...m, secretKey: e.target.value } : m);
+                                setPaymentMethods(updated);
+                              }}
+                              onBlur={(e) => savePaymentMethod({ ...method, secretKey: e.target.value })}
+                              className="mt-1 w-full p-3 rounded-xl border border-slate-200 text-sm font-mono"
+                              placeholder="••••••••••••••••"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Manual Methods */}
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Manual Verification Options</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {paymentMethods.filter((m: any) => m.type === 'manual' || !m.type).map(method => (
+                    <div key={method.id} className="p-6 bg-white border border-slate-200 rounded-3xl shadow-sm relative group">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-bold text-lg text-slate-800">{method.name}</h4>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => savePaymentMethod({ ...method, isActive: !method.isActive })}
+                            className={cn("px-3 py-1 rounded-full text-xs font-bold transition-all", method.isActive ? "bg-nepal-green/10 text-nepal-green" : "bg-slate-100 text-slate-500")}
+                          >
+                            {method.isActive ? 'Active' : 'Disabled'}
+                          </button>
+                          <button 
+                            onClick={() => deletePaymentMethod(method.id)}
+                            className="p-1 text-slate-400 hover:text-nepal-red hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                            title="Delete Method"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Details (Account info or Link)</label>
+                          <textarea 
+                            value={method.details}
+                            onChange={(e) => {
+                              const updated = paymentMethods.map(m => m.id === method.id ? { ...m, details: e.target.value } : m);
+                              setPaymentMethods(updated);
+                            }}
+                            onBlur={(e) => savePaymentMethod({ ...method, details: e.target.value })}
+                            className="mt-1 w-full p-3 rounded-xl border border-slate-200 text-sm font-mono h-24 resize-none bg-slate-50"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">QR Code Image URL</label>
+                          <input 
+                            value={method.qrCode}
+                            onChange={(e) => {
+                              const updated = paymentMethods.map(m => m.id === method.id ? { ...m, qrCode: e.target.value } : m);
+                              setPaymentMethods(updated);
+                            }}
+                            onBlur={(e) => savePaymentMethod({ ...method, qrCode: e.target.value })}
+                            className="mt-1 w-full p-3 rounded-xl border border-slate-200 text-sm bg-slate-50"
+                            placeholder="https://..."
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Transactions Log */}
+              <div className="bg-white border border-slate-200 rounded-[48px] p-10 shadow-2xl">
+                <h2 className="text-2xl font-bold text-slate-900 mb-8">Transactions & Approvals</h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                     <thead>
+                        <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 italic">
+                          <th className="pb-4 pt-1">User Info</th>
+                          <th className="pb-4 pt-1">Subscription Plan</th>
+                          <th className="pb-4 pt-1">Payment Proof / Tx ID</th>
+                          <th className="pb-4 pt-1">Amount / Time</th>
+                          <th className="pb-4 pt-1">Status</th>
+                          <th className="pb-4 pt-1 text-right">Actions</th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-50">
+                        {transactions.map((tx) => (
+                          <tr key={tx.id} className="group hover:bg-slate-50/50 transition-colors">
+                             <td className="py-4">
+                                <p className="text-sm font-bold text-slate-800 truncate">{tx.userName || 'Unknown'}</p>
+                                <p className="text-xs text-slate-400 truncate">{tx.userEmail}</p>
+                             </td>
+                             <td className="py-4 font-bold capitalize text-nepal-blue">{tx.plan}</td>
+                             <td className="py-4 font-mono text-sm max-w-[200px] truncate" title={tx.transactionNumber}>{tx.transactionNumber}</td>
+                             <td className="py-4 text-xs font-bold text-slate-500">
+                               रू {tx.amount}
+                               <p className="font-normal">{new Date(tx.createdAt).toLocaleString()}</p>
+                             </td>
+                             <td className="py-4">
+                               <span className={cn(
+                                 "text-[10px] font-black px-2 py-1 rounded-lg border uppercase tracking-wider",
+                                 tx.status === 'approved' ? "bg-green-50 text-nepal-green border-green-100" :
+                                 tx.status === 'rejected' ? "bg-red-50 text-nepal-red border-red-100" :
+                                 "bg-amber-50 text-amber-500 border-amber-100"
+                               )}>{tx.status}</span>
+                             </td>
+                             <td className="py-4 text-right">
+                                {tx.status === 'pending' && (
+                                   <div className="flex items-center justify-end gap-2">
+                                     <button 
+                                       onClick={() => updateTransactionStatus(tx.id, 'approved')}
+                                       className="p-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-xl transition-colors"
+                                       title="Approve"
+                                     ><CheckCircle2 className="w-5 h-5" /></button>
+                                     <button 
+                                       onClick={() => updateTransactionStatus(tx.id, 'rejected')}
+                                       className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-colors"
+                                       title="Reject"
+                                     ><Trash2 className="w-5 h-5" /></button>
+                                   </div>
+                                )}
+                             </td>
+                          </tr>
+                        ))}
+                     </tbody>
+                  </table>
+                </div>
+              </div>
             </motion.div>
           )}
 

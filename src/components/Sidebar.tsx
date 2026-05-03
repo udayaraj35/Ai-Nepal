@@ -31,9 +31,10 @@ interface SidebarProps {
   setActiveTool: (tool: string) => void;
   onNewChat: () => void;
   isAdmin?: boolean;
+  onBackToAdmin?: () => void;
 }
 
-export default function Sidebar({ activeTool, setActiveTool, onNewChat, isAdmin }: SidebarProps) {
+export default function Sidebar({ activeTool, setActiveTool, onNewChat, isAdmin, onBackToAdmin }: SidebarProps) {
   const { user, logout } = useAuth();
   const [isToolsOpen, setIsToolsOpen] = React.useState(true);
 
@@ -41,13 +42,6 @@ export default function Sidebar({ activeTool, setActiveTool, onNewChat, isAdmin 
     { id: 'avatars', name: 'Avatars', icon: Users, color: 'text-nepal-red', bg: 'bg-nepal-red/10' },
     { id: 'projects', name: 'Projects', icon: FolderOpen, color: 'text-nepal-blue', bg: 'bg-nepal-blue/10' },
     { id: 'games', name: 'Games', icon: Gamepad2, color: 'text-nepal-red', bg: 'bg-nepal-red/10' },
-  ];
-
-  const adminTools = [
-    { id: 'admin', name: 'System Command', icon: Shield, color: 'text-slate-900', bg: 'bg-slate-100' },
-    { id: 'admin-users', name: 'User Control', icon: Users, color: 'text-nepal-blue', bg: 'bg-nepal-blue/5' },
-    { id: 'admin-models', name: 'Model Lab', icon: Cpu, color: 'text-nepal-red', bg: 'bg-nepal-red/5' },
-    { id: 'admin-stats', name: 'System Stats', icon: BarChart3, color: 'text-emerald-600', bg: 'bg-emerald-50' },
   ];
 
   return (
@@ -161,42 +155,6 @@ export default function Sidebar({ activeTool, setActiveTool, onNewChat, isAdmin 
             </div>
           )}
 
-          {isAdmin && (
-            <div className="mt-8">
-              <div className="flex items-center justify-between px-4 mb-3">
-                <span className="text-[10px] font-bold text-nepal-red uppercase tracking-widest">Admin Orchestration</span>
-              </div>
-              <div className="space-y-1 px-1">
-                {adminTools.map((tool) => (
-                  <button 
-                    key={tool.id}
-                    onClick={() => setActiveTool(tool.id)}
-                    className={cn(
-                      "w-full flex items-center justify-between px-3 py-2.5 rounded-xl group transition-all",
-                      activeTool === tool.id ? "bg-slate-900 border-none shadow-xl shadow-slate-900/10 text-white" : "hover:bg-slate-200/50"
-                    )}
-                  >
-                    <div className={cn(
-                      "flex items-center gap-3 text-sm font-bold transition-colors",
-                      activeTool === tool.id ? "text-white" : "text-slate-600 group-hover:text-slate-900"
-                    )}>
-                      <div className={cn(
-                          "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
-                          activeTool === tool.id ? "bg-white/10" : tool.bg
-                      )}>
-                          <tool.icon className={cn("w-4 h-4", activeTool === tool.id ? "text-white" : tool.color)} />
-                      </div>
-                      {tool.name}
-                    </div>
-                    <ChevronRight className={cn(
-                      "w-4 h-4 transform group-hover:translate-x-1 transition-transform",
-                      activeTool === tool.id ? "text-white/40" : "text-slate-300"
-                    )} />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </nav>
 
@@ -233,34 +191,66 @@ export default function Sidebar({ activeTool, setActiveTool, onNewChat, isAdmin 
           </div>
         )}
 
+        {isAdmin && onBackToAdmin && (
+          <div className="relative overflow-hidden bg-slate-900 rounded-3xl p-5 border border-slate-800 shadow-xl shadow-slate-900/20 group">
+             <div className="absolute -right-4 -top-4 w-20 h-20 bg-emerald-500/10 blur-2xl group-hover:bg-emerald-500/20 transition-colors" />
+             <div className="flex items-center gap-3 mb-4">
+                 <div className="p-2 bg-slate-800 rounded-xl text-emerald-500">
+                    <ShieldCheck className="w-5 h-5" />
+                 </div>
+                 <div>
+                    <p className="text-xs font-bold text-white uppercase tracking-wider">Admin Mode</p>
+                    <p className="text-[10px] text-slate-400">Website View Active</p>
+                 </div>
+             </div>
+             <button 
+                onClick={onBackToAdmin}
+                className="w-full py-3 bg-white hover:bg-slate-50 text-slate-900 rounded-[18px] text-[10px] font-bold flex items-center justify-center gap-2 transition-all active:scale-95 uppercase tracking-widest"
+             >
+                Return to Admin Panel
+             </button>
+          </div>
+        )}
+
         <div className="flex items-center justify-between px-1">
-            <button 
-              onClick={() => setActiveTool('profile')}
-              className={cn(
-                "flex items-center gap-3 group/profile flex-1 transition-all p-1 rounded-2xl hover:bg-slate-100",
-                activeTool === 'profile' && "bg-slate-100"
-              )}
-            >
-              <div className="relative">
-                {user?.photoURL ? (
-                    <img src={user.photoURL} alt="avatar" className="w-10 h-10 rounded-2xl border border-white shadow-sm object-cover" />
-                ) : (
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-slate-200 to-slate-100 flex items-center justify-center text-slate-600 font-bold text-sm border border-white shadow-sm">
-                    {user?.displayName?.charAt(0) || 'U'}
-                    </div>
-                )}
-                <div className="absolute -right-1 -bottom-1 w-3.5 h-3.5 bg-nepal-green border-2 border-white rounded-full transition-transform group-hover/profile:scale-110" />
-              </div>
-              <div className="max-w-[120px] text-left">
-                <p className="text-xs font-bold text-slate-800 truncate leading-none mb-1 uppercase tracking-tight group-hover/profile:text-nepal-blue">
-                  {user?.displayName?.split(' ')[0] || 'User'}
-                </p>
-                <p className="text-[9px] text-slate-400 truncate tracking-tight lowercase">Manage Account</p>
-              </div>
-            </button>
-            <button onClick={logout} className="p-2.5 text-slate-400 hover:text-nepal-red hover:bg-nepal-red/5 rounded-xl transition-all" title="Logout">
-              <LogOut className="w-4 h-4" />
-            </button>
+            {!user ? (
+              <button 
+                onClick={() => setActiveTool('login')}
+                className="w-full py-3 bg-nepal-blue hover:bg-nepal-blue/90 text-white rounded-xl text-sm font-bold flex items-center justify-center transition-all shadow-md active:scale-95 text-center px-4"
+              >
+                Log In
+              </button>
+            ) : (
+              <>
+                <button 
+                  onClick={() => setActiveTool('profile')}
+                  className={cn(
+                    "flex items-center gap-3 group/profile flex-1 transition-all p-1 rounded-2xl hover:bg-slate-100",
+                    activeTool === 'profile' && "bg-slate-100"
+                  )}
+                >
+                  <div className="relative">
+                    {user?.photoURL ? (
+                        <img src={user.photoURL} alt="avatar" className="w-10 h-10 rounded-2xl border border-white shadow-sm object-cover" />
+                    ) : (
+                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-slate-200 to-slate-100 flex items-center justify-center text-slate-600 font-bold text-sm border border-white shadow-sm">
+                        {user?.displayName?.charAt(0) || 'U'}
+                        </div>
+                    )}
+                    <div className="absolute -right-1 -bottom-1 w-3.5 h-3.5 bg-nepal-green border-2 border-white rounded-full transition-transform group-hover/profile:scale-110" />
+                  </div>
+                  <div className="max-w-[120px] text-left">
+                    <p className="text-xs font-bold text-slate-800 truncate leading-none mb-1 uppercase tracking-tight group-hover/profile:text-nepal-blue">
+                      {user?.displayName?.split(' ')[0] || 'User'}
+                    </p>
+                    <p className="text-[9px] text-slate-400 truncate tracking-tight lowercase">Manage Account</p>
+                  </div>
+                </button>
+                <button onClick={logout} className="p-2.5 text-slate-400 hover:text-nepal-red hover:bg-nepal-red/5 rounded-xl transition-all" title="Logout">
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </>
+            )}
           </div>
       </div>
     </div>

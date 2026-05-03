@@ -16,6 +16,8 @@ interface ChatInterfaceProps {
   onSendMessage: (content: string, attachments?: { data: string, mimeType: string }[]) => void;
   isLoading: boolean;
   userDisplayName: string;
+  onRequireLogin?: () => void;
+  isGuest?: boolean;
 }
 
 interface AIModel {
@@ -141,7 +143,7 @@ function MessageBubble({ message, userDisplayName }: { message: Message, userDis
   );
 }
 
-export default function ChatInterface({ messages, onSendMessage, isLoading, userDisplayName }: ChatInterfaceProps) {
+export default function ChatInterface({ messages, onSendMessage, isLoading, userDisplayName, onRequireLogin, isGuest }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<{ data: string, mimeType: string, name: string }[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -252,14 +254,30 @@ export default function ChatInterface({ messages, onSendMessage, isLoading, user
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if ((input.trim() || attachments.length > 0) && !isLoading) {
-      onSendMessage(input, attachments.map(({ data, mimeType }) => ({ data, mimeType })));
+  const handleSubmit = (e?: React.FormEvent, presetInput?: string) => {
+    if (e) e.preventDefault();
+    if (isGuest && onRequireLogin) {
+      onRequireLogin();
+      return;
+    }
+    
+    const textToSubmit = presetInput !== undefined ? presetInput : input;
+    if ((textToSubmit.trim() || attachments.length > 0) && !isLoading) {
+      onSendMessage(textToSubmit, attachments.map(({ data, mimeType }) => ({ data, mimeType })));
       setInput('');
       setAttachments([]);
     }
   };
+
+  const setInputAndSubmit = (text: string) => {
+    if (isGuest && onRequireLogin) {
+      onRequireLogin();
+      return;
+    }
+    setInput(text);
+    handleSubmit(undefined, text);
+  };
+
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#f9fbfb] relative overflow-hidden grid-bg">
@@ -377,118 +395,123 @@ export default function ChatInterface({ messages, onSendMessage, isLoading, user
         <div className="max-w-4xl mx-auto space-y-10">
           {messages.length === 0 ? (
             <motion.div 
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-              className="flex flex-col items-center pt-8 md:pt-16 pb-12"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="flex flex-col items-center justify-center min-h-[70vh] w-full max-w-3xl mx-auto px-4"
             >
-              {/* 1. Welcome Header */}
-              <div className="w-full max-w-2xl text-center mb-16 px-4">
-                <div className="relative inline-block mb-8">
-                  <div className="absolute inset-0 bg-nepal-red/20 blur-3xl rounded-full scale-150 animate-pulse" />
-                  <div className="relative w-24 h-24 md:w-32 md:h-32 bg-white rounded-[40px] shadow-2xl flex items-center justify-center border border-slate-100 group transition-all duration-700">
-                    <div className="w-16 h-16 md:w-24 md:h-24 rounded-[32px] bg-gradient-to-tr from-slate-900 to-slate-800 flex items-center justify-center text-white shadow-xl">
-                      <Sparkles className="w-8 h-8 md:w-12 md:h-12 text-nepal-red" />
-                    </div>
-                  </div>
-                </div>
-                
-                <h1 className="text-4xl md:text-6xl font-bold text-slate-900 mb-4 tracking-tight">
-                  Welcome to <span className="text-nepal-red italic">AI Nepal</span>
-                </h1>
-                <p className="text-slate-500 font-medium text-lg md:text-xl">
-                  {userDisplayName.split(' ')[0]}, how can I assist your creative workflow today?
-                </p>
-              </div>
+              <h1 className="text-3xl md:text-4xl font-semibold text-slate-800 mb-8 text-center tracking-tight">
+                What can I help you with today?
+              </h1>
 
-              {/* 2. Chat Input Area */}
-              <div className="w-full max-w-4xl relative mb-16">
-                <div className="absolute inset-0 bg-slate-900/5 blur-3xl rounded-[64px]" />
-                <div className="relative bg-white/40 backdrop-blur-3xl border border-white/60 rounded-[56px] p-4 flex flex-col md:flex-row items-center gap-4 shadow-2xl">
-                    <div className="flex-1 w-full flex items-center gap-4 px-6 py-4">
-                        <button 
-                          onClick={() => fileInputRef.current?.click()}
-                          className="p-3 bg-slate-100 hover:bg-slate-200 rounded-2xl text-slate-400 transition-all active:scale-95"
+              {/* Chat.GPT-style Input Area */}
+              <div className="w-full relative">
+                <AnimatePresence>
+                  {attachments.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {attachments.map((att, i) => (
+                        <motion.div 
+                          key={i} 
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          exit={{ scale: 0.8, opacity: 0 }}
+                          className="relative w-16 h-16 bg-white rounded-xl overflow-hidden border border-slate-200 shadow-sm"
                         >
-                          <Paperclip className="w-6 h-6" />
-                        </button>
-                        <input
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSubmit(e);
-                            }}
-                            placeholder="Message AI Nepal Intelligence..."
-                            className="w-full bg-transparent border-none focus:ring-0 text-xl font-bold text-slate-800 placeholder:text-slate-400/80 outline-none"
-                        />
-                    </div>
-                    <div className="flex items-center gap-2 p-2 w-full md:w-auto justify-end">
-                       <button 
-                          onClick={toggleRecording}
-                          className={cn(
-                            "w-12 h-12 md:w-16 md:h-16 rounded-[28px] flex items-center justify-center transition-all",
-                            isRecording ? "bg-nepal-red text-white animate-pulse" : "bg-slate-100 hover:bg-slate-200 text-slate-400"
+                          {att.mimeType.startsWith('image/') ? (
+                            <img src={att.data} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-red-500 bg-slate-50">
+                               <FileText className="w-6 h-6" />
+                            </div>
                           )}
-                        >
-                        <Mic className={cn("w-6 h-6", isRecording && "fill-current")} />
-                      </button>
-                      <button 
-                        onClick={handleSubmit}
-                        disabled={!input.trim() && attachments.length === 0}
-                        className="w-12 h-12 md:w-16 md:h-16 bg-slate-900 hover:scale-105 disabled:bg-slate-200 disabled:scale-100 text-white rounded-[28px] flex items-center justify-center transition-all shadow-xl active:scale-95"
-                      >
-                        <Send className="w-6 h-6" />
-                      </button>
+                          <button 
+                            onClick={() => removeAttachment(i)}
+                            className="absolute top-1 right-1 p-0.5 bg-slate-900/50 hover:bg-slate-900 text-white rounded-full transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+                </AnimatePresence>
+
+                <div className="relative bg-white border border-slate-200 focus-within:border-slate-300 focus-within:shadow-md rounded-3xl p-3 flex flex-col shadow-sm transition-all">
+                    
+                    <textarea
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSubmit(e);
+                            }
+                        }}
+                        placeholder="Message AI Nepal..."
+                        rows={1}
+                        className="w-full bg-transparent border-none focus:ring-0 text-base md:text-lg resize-none outline-none text-slate-800 placeholder:text-slate-500 min-h-[44px] max-h-48 py-2 px-1"
+                    />
+                    
+                    <div className="flex items-center justify-between mt-2 pt-2">
+                        <div className="flex items-center gap-1">
+                            <button 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors flex items-center justify-center"
+                                title="Attach files"
+                            >
+                                <Paperclip className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={toggleRecording}
+                                className={cn(
+                                    "p-2 rounded-full transition-colors flex items-center justify-center",
+                                    isRecording ? "text-white bg-nepal-red animate-pulse" : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                                )}
+                                title="Voice input"
+                            >
+                                <Mic className="w-5 h-5" />
+                            </button>
+                            <button 
+                                onClick={handleSubmit}
+                                disabled={!input.trim() && attachments.length === 0}
+                                className="p-2 bg-slate-900 text-white rounded-full transition-all disabled:opacity-30 disabled:bg-slate-200 disabled:text-slate-400 flex items-center justify-center hover:bg-slate-800"
+                                title="Send message"
+                            >
+                                <Send className="w-4 h-4 ml-0.5" />
+                            </button>
+                        </div>
                     </div>
                 </div>
               </div>
-              
-              {/* 3. Tool Cards */}
-              <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-3 gap-6 px-4">
-                 <div className="bg-white rounded-[40px] p-8 shadow-xl shadow-slate-200/20 border border-slate-100 hover:-translate-y-2 transition-all group">
-                    <div className="w-12 h-12 bg-nepal-blue/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-nepal-blue transition-colors">
-                       <Zap className="w-6 h-6 text-nepal-blue group-hover:text-white" />
-                    </div>
-                    <h3 className="font-black text-[10px] uppercase tracking-widest text-slate-400 mb-2">Speed Tools</h3>
-                    <h4 className="text-lg font-bold text-slate-900 mb-4">Quick Analysis</h4>
-                    <div className="space-y-3">
-                       {['Analyze this PDF', 'Summarize notes', 'Fact check data'].map(s => (
-                         <button key={s} onClick={() => setInput(s)} className="w-full text-left p-3 rounded-2xl hover:bg-slate-50 text-xs font-bold text-slate-500 hover:text-nepal-blue transition-all border border-transparent hover:border-slate-100 flex items-center justify-between group/btn">
-                           {s} <ArrowUpRight className="w-3 h-3 opacity-0 group-hover/btn:opacity-100" />
-                         </button>
-                       ))}
-                    </div>
-                 </div>
 
-                 <div className="bg-white rounded-[40px] p-8 shadow-xl shadow-slate-200/20 border border-slate-100 hover:-translate-y-2 transition-all group">
-                    <div className="w-12 h-12 bg-nepal-red/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-nepal-red transition-colors">
-                       <ImageIcon className="w-6 h-6 text-nepal-red group-hover:text-white" />
-                    </div>
-                    <h3 className="font-black text-[10px] uppercase tracking-widest text-slate-400 mb-2">Creative Hub</h3>
-                    <h4 className="text-lg font-bold text-slate-900 mb-4">Content Design</h4>
-                    <div className="space-y-3">
-                       {['Write viral thread', 'Design UI layout', 'Create ad copy'].map(s => (
-                         <button key={s} onClick={() => setInput(s)} className="w-full text-left p-3 rounded-2xl hover:bg-slate-50 text-xs font-bold text-slate-500 hover:text-nepal-red transition-all border border-transparent hover:border-slate-100 flex items-center justify-between group/btn">
-                           {s} <ArrowUpRight className="w-3 h-3 opacity-0 group-hover/btn:opacity-100" />
-                         </button>
-                       ))}
-                    </div>
-                 </div>
-
-                 <div className="bg-white rounded-[40px] p-8 shadow-xl shadow-slate-200/20 border border-slate-100 hover:-translate-y-2 transition-all group">
-                    <div className="w-12 h-12 bg-slate-900/10 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-slate-900 transition-colors">
-                       <Search className="w-6 h-6 text-slate-900 group-hover:text-white" />
-                    </div>
-                    <h3 className="font-black text-[10px] uppercase tracking-widest text-slate-400 mb-2">Nepal Lab</h3>
-                    <h4 className="text-lg font-bold text-slate-900 mb-4">Regional Insights</h4>
-                    <div className="space-y-3">
-                       {['Nepal market trends', 'Cultural context', 'translation help'].map(s => (
-                         <button key={s} onClick={() => setInput(s)} className="w-full text-left p-3 rounded-2xl hover:bg-slate-50 text-xs font-bold text-slate-500 hover:text-nepal-red transition-all border border-transparent hover:border-slate-100 flex items-center justify-between group/btn">
-                           {s} <ArrowUpRight className="w-3 h-3 opacity-0 group-hover/btn:opacity-100" />
-                         </button>
-                       ))}
-                    </div>
-                 </div>
+              {/* Suggestion Chips */}
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                 <button 
+                    onClick={() => setInputAndSubmit("Create an image of the Himalayas at sunset")}
+                    className="px-4 py-2 md:py-2.5 bg-white border border-slate-200 hover:bg-slate-50 rounded-full text-slate-600 font-medium text-sm flex items-center gap-2.5 transition-colors shadow-sm"
+                 >
+                    <ImageIcon className="w-4 h-4 text-emerald-500" /> Create image
+                 </button>
+                 <button 
+                    onClick={() => setInputAndSubmit("Summarize the history of Nepal")}
+                    className="px-4 py-2 md:py-2.5 bg-white border border-slate-200 hover:bg-slate-50 rounded-full text-slate-600 font-medium text-sm flex items-center gap-2.5 transition-colors shadow-sm"
+                 >
+                    <FileText className="w-4 h-4 text-amber-500" /> Summarize text
+                 </button>
+                 <button 
+                    onClick={() => setInputAndSubmit("Translate 'Hello, how are you?' to Nepali")}
+                    className="px-4 py-2 md:py-2.5 bg-white border border-slate-200 hover:bg-slate-50 rounded-full text-slate-600 font-medium text-sm flex items-center gap-2.5 transition-colors shadow-sm"
+                 >
+                    <Globe className="w-4 h-4 text-blue-500" /> Translate to Nepali
+                 </button>
+                 <button 
+                    onClick={() => setInputAndSubmit("Tell me a fun fact about Kathmandu")}
+                    className="px-4 py-2 md:py-2.5 bg-white border border-slate-200 hover:bg-slate-50 rounded-full text-slate-600 font-medium text-sm flex items-center gap-2.5 transition-colors shadow-sm"
+                 >
+                    <Sparkles className="w-4 h-4 text-nepal-red" /> Surprise me
+                 </button>
               </div>
             </motion.div>
           ) : (
@@ -571,7 +594,7 @@ export default function ChatInterface({ messages, onSendMessage, isLoading, user
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Type or upload to AI Nepal..."
+                  placeholder="Type your query here or ask me anything..."
                   rows={1}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {

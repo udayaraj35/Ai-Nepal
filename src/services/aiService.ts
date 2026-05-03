@@ -2,6 +2,31 @@ import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+export async function chatWithAdminAI(prompt: string, history: { role: string, content: string }[] = []) {
+  try {
+    const contents = [
+      ...history.map(h => ({ 
+        role: h.role === 'user' ? 'user' : 'model', 
+        parts: [{ text: h.content }] 
+      })),
+      { role: 'user', parts: [{ text: prompt }] }
+    ];
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents,
+      config: {
+        systemInstruction: "You are the Root System Architect for AI Nepal. You are exclusively addressing the Administrator. You assist with configuring settings, maintaining optimal platform health, managing models, and processing administrative modifications. You speak as a highly secure, technical, and precise system console interface. When an admin requests a feature change or website edit, you analyze it from a developer's perspective and provide the exact required JSON structures, commands, or procedural steps. Keep interaction technical and concise.",
+      }
+    });
+
+    return response.text;
+  } catch (error) {
+    console.error("Gemini Admin API Error:", error);
+    throw error;
+  }
+}
+
 export async function chatWithAI(prompt: string, history: { role: string, content: string }[] = [], attachments: { data: string, mimeType: string }[] = []) {
   try {
     const contents = [

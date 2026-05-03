@@ -9,7 +9,7 @@ import MobileNav from './components/MobileNav';
 import ChatInterface from './components/ChatInterface';
 import Login from './components/Login';
 import Subscription from './components/Subscription';
-import AdminPanel from './components/AdminPanel';
+import AdminLayout from './components/AdminLayout';
 import ImageStudio from './components/ImageStudio';
 import AvatarStudio from './components/AvatarStudio';
 import ProjectStudio from './components/ProjectStudio';
@@ -36,7 +36,8 @@ enum OperationType {
 
 export default function App() {
   const { user, loading, isAdmin, logout } = useAuth();
-  const [activeTool, setActiveTool] = useState(isAdmin ? 'admin' : 'chat');
+  const [activeTool, setActiveTool] = useState('chat');
+  const [adminViewMode, setAdminViewMode] = useState<'admin' | 'user'>('admin');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -57,12 +58,15 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (isAdmin) {
-      setActiveTool('admin');
-    } else {
-      setActiveTool('chat');
+    if (user && activeTool === 'login') {
+      if (isAdmin) {
+        setAdminViewMode('admin');
+        setActiveTool('chat');
+      } else {
+        setActiveTool('chat');
+      }
     }
-  }, [isAdmin]);
+  }, [user, isAdmin, activeTool]);
 
   // Load chat messages when session changes
   useEffect(() => {
@@ -96,10 +100,6 @@ export default function App() {
         <div className="w-12 h-12 border-4 border-nepal-red border-t-transparent rounded-full animate-spin" />
       </div>
     );
-  }
-
-  if (!user) {
-    return <Login />;
   }
 
   const startNewChat = () => {
@@ -159,6 +159,10 @@ export default function App() {
     }
   };
 
+  if (isAdmin && adminViewMode === 'admin') {
+    return <AdminLayout onGoToWebsite={() => setAdminViewMode('user')} />;
+  }
+
   return (
     <div className="flex h-screen w-full bg-white overflow-hidden relative">
       <Sidebar 
@@ -166,20 +170,28 @@ export default function App() {
         setActiveTool={setActiveTool} 
         onNewChat={startNewChat}
         isAdmin={isAdmin}
+        onBackToAdmin={() => setAdminViewMode('admin')}
       />
 
       <main className="flex-1 flex flex-col min-w-0 bg-white">
-        {activeTool === 'chat' ? (
+        {activeTool === 'login' && !user ? (
+          <Login />
+        ) : activeTool === 'chat' ? (
           <ChatInterface 
             messages={messages} 
             onSendMessage={handleSendMessage} 
             isLoading={isLoading} 
-            userDisplayName={user.displayName || 'User'}
+            userDisplayName={user?.displayName || 'User'}
+            onRequireLogin={() => setActiveTool('login')}
+            isGuest={!user}
           />
         ) : activeTool === 'subscription' ? (
           <Subscription />
         ) : activeTool === 'image' ? (
-          <ImageStudio />
+          <ImageStudio 
+            isGuest={!user}
+            onRequireLogin={() => setActiveTool('login')}
+          />
         ) : activeTool === 'avatars' ? (
           <AvatarStudio />
         ) : activeTool === 'projects' ? (
@@ -190,15 +202,6 @@ export default function App() {
           <VideoStudio />
         ) : activeTool === 'audio' ? (
           <AudioStudio />
-        ) : activeTool === 'admin' || activeTool === 'admin-users' || activeTool === 'admin-models' || activeTool === 'admin-stats' ? (
-          <AdminPanel 
-            initialTab={
-              activeTool === 'admin-users' ? 'users' : 
-              activeTool === 'admin-models' ? 'models' : 
-              activeTool === 'admin-stats' ? 'analysis' : 
-              'analysis'
-            } 
-          />
         ) : activeTool === 'profile' ? (
           <ProfileView 
             user={user} 
@@ -231,6 +234,8 @@ export default function App() {
         activeTool={activeTool} 
         setActiveTool={setActiveTool} 
         isAdmin={isAdmin}
+        isGuest={!user}
+        onBackToAdmin={() => setAdminViewMode('admin')}
       />
     </div>
   );
@@ -429,31 +434,6 @@ function ProfileView({ user, isAdmin, setActiveTool, logout }: { user: any, isAd
                      <button className="text-[10px] font-black text-nepal-blue hover:underline uppercase tracking-widest">Change</button>
                   </div>
              </div>
-
-             {isAdmin && (
-                <div className="mt-10 p-10 bg-slate-900 rounded-[40px] relative overflow-hidden">
-                   <div className="absolute top-0 right-0 p-8 opacity-10">
-                      <ShieldCheck className="w-32 h-32 text-white" />
-                   </div>
-                   <h4 className="text-2xl font-bold text-white mb-2">Operator Console</h4>
-                   <p className="text-white/40 text-sm mb-8 max-w-sm">You have administrative override privileges. System integrity is your responsibility.</p>
-                   
-                   <div className="grid grid-cols-2 gap-4">
-                      <button 
-                         onClick={() => setActiveTool('admin')}
-                         className="py-4 bg-white/10 hover:bg-white text-white hover:text-slate-900 rounded-2xl text-xs font-black uppercase tracking-widest transition-all"
-                      >
-                         Control Panel
-                      </button>
-                      <button 
-                         onClick={() => setActiveTool('admin-users')}
-                         className="py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all"
-                      >
-                         User Registry
-                      </button>
-                   </div>
-                </div>
-             )}
           </div>
         </div>
       </div>

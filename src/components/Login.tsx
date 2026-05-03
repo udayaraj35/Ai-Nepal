@@ -33,7 +33,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 relative overflow-hidden grid-bg">
+    <div className="h-full w-full flex items-center justify-center bg-slate-50 relative overflow-hidden grid-bg">
       <div className="absolute inset-0 fiesta-blur pointer-events-none" />
       
       <motion.div 

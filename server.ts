@@ -19,7 +19,16 @@ if (!fs.existsSync(DB_PATH)) {
     projects: [], 
     games: [], 
     chat_sessions: [], 
-    messages: [],
+    paymentMethods: [
+      { id: 'esewa_api', name: 'eSewa (Integrated)', type: 'integration', merchantCode: '', secretKey: '', isActive: false },
+      { id: 'khalti_api', name: 'Khalti (Integrated)', type: 'integration', publicKey: '', secretKey: '', isActive: false },
+      { id: 'imepay_api', name: 'IME Pay (Integrated)', type: 'integration', merchantCode: '', moduleUrl: '', apiUser: '', password: '', isActive: false },
+      { id: 'fonepay_api', name: 'Fonepay (Integrated)', type: 'integration', merchantCode: '', secretKey: '', isActive: false },
+      { id: 'bank_transfer', name: 'Global IME Bank', type: 'manual', details: 'A/C Name: AI Nepal Tech\nA/C No: 1234567890\nBranch: Kathmandu', qrCode: '', isActive: true },
+      { id: 'esewa_manual', name: 'eSewa (Manual)', type: 'manual', details: 'eSewa ID: 9812345678\nName: AI Nepal Team', qrCode: '', isActive: true },
+      { id: 'khalti_manual', name: 'Khalti (Manual)', type: 'manual', details: 'Khalti ID: 9812345678\nName: AI Nepal Team', qrCode: '', isActive: true }
+    ],
+    transactions: [],
     ai_models: [
       { id: 'gemini-2-flash', provider: 'Google', name: 'Gemini 2.0 Flash', version: '2.0', logo: 'https://www.gstatic.com/lamda/images/favicon_v2_196x196.png', description: 'Ultra-fast, high-reasoning multimodal model.', status: 'active', createdAt: new Date().toISOString() },
       { id: 'gpt-4o', provider: 'OpenAI', name: 'GPT-4o', version: 'Omni', logo: 'https://openai.com/favicon.ico', description: 'Advanced reasoning and creative writing.', status: 'inactive', createdAt: new Date().toISOString() },
@@ -184,7 +193,7 @@ app.get('/api/admin/models', authenticate, (req, res) => {
 });
 
 app.post('/api/admin/models', authenticate, isAdmin, (req, res) => {
-  const { provider, name, version, logo, description, status } = req.body;
+  const { provider, name, version, logo, description, status, apiKey, apiEndpoint } = req.body;
   const db = getDB();
   const newModel = {
     id: Math.random().toString(36).substr(2, 9),
@@ -194,6 +203,8 @@ app.post('/api/admin/models', authenticate, isAdmin, (req, res) => {
     logo,
     description,
     status: status || 'active',
+    apiKey: apiKey || '',
+    apiEndpoint: apiEndpoint || '',
     createdAt: new Date().toISOString()
   };
   if (!db.ai_models) db.ai_models = [];
@@ -354,6 +365,102 @@ app.post('/api/chat/sessions/:id/messages', authenticate, (req: any, res) => {
   
   saveDB(db);
   res.status(201).json(newMessage);
+});
+
+// --- Payment Methods ---
+app.get('/api/payment-methods', (req, res) => {
+  const db = getDB();
+  res.json(db.paymentMethods || []);
+});
+
+app.patch('/api/admin/payment-methods/:id', authenticate, isAdmin, (req, res) => {
+  const db = getDB();
+  const methodIndex = db.paymentMethods.findIndex((m: any) => m.id === req.params.id);
+  if (methodIndex === -1) return res.status(404).json({ error: 'Payment method not found' });
+  
+  db.paymentMethods[methodIndex] = { ...db.paymentMethods[methodIndex], ...req.body };
+  saveDB(db);
+  res.json(db.paymentMethods[methodIndex]);
+});
+
+app.post('/api/admin/payment-methods', authenticate, isAdmin, (req, res) => {
+  const db = getDB();
+  const newMethod = {
+    id: 'manual_' + Date.now(),
+    type: 'manual',
+    name: req.body.name || 'New Method',
+    details: req.body.details || '',
+    qrCode: req.body.qrCode || '',
+    isActive: true
+  };
+  db.paymentMethods.push(newMethod);
+  saveDB(db);
+  res.status(201).json(newMethod);
+});
+
+app.delete('/api/admin/payment-methods/:id', authenticate, isAdmin, (req, res) => {
+  const db = getDB();
+  db.paymentMethods = db.paymentMethods.filter((m: any) => m.id !== req.params.id);
+  saveDB(db);
+  res.json({ success: true });
+});
+
+// --- Transactions ---
+app.get('/api/transactions/me', authenticate, (req: any, res) => {
+  const db = getDB();
+  const userTx = (db.transactions || []).filter((t: any) => t.userId === req.user.uid);
+  res.json(userTx);
+});
+
+app.post('/api/transactions', authenticate, (req: any, res) => {
+  const { plan, amount, methodId, transactionNumber } = req.body;
+  const db = getDB();
+  if (!db.transactions) db.transactions = [];
+  
+  const user = db.users.find((u: any) => u.uid === req.user.uid);
+  
+  const newTx = {
+    id: Math.random().toString(36).substr(2, 9),
+    userId: req.user.uid,
+    userEmail: user?.email,
+    userName: user?.displayName,
+    plan,
+    amount,
+    methodId,
+    transactionNumber,
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  };
+  db.transactions.push(newTx);
+  saveDB(db);
+  res.status(201).json(newTx);
+});
+
+app.get('/api/admin/transactions', authenticate, isAdmin, (req, res) => {
+  const db = getDB();
+  res.json(db.transactions || []);
+});
+
+app.patch('/api/admin/transactions/:id/status', authenticate, isAdmin, (req, res) => {
+  const { status } = req.body;
+  const db = getDB();
+  const txIndex = db.transactions.findIndex((t: any) => t.id === req.params.id);
+  
+  if (txIndex === -1) return res.status(404).json({ error: 'Transaction not found' });
+  
+  db.transactions[txIndex].status = status;
+  
+  // If approved, update user's subscription
+  if (status === 'approved') {
+    const userId = db.transactions[txIndex].userId;
+    const userIndex = db.users.findIndex((u: any) => u.uid === userId);
+    if (userIndex !== -1) {
+      db.users[userIndex].subscription = db.transactions[txIndex].plan;
+    }
+  }
+  
+  saveDB(db);
+  res.json(db.transactions[txIndex]);
 });
 
 // Profile Update

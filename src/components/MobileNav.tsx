@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Home, MessageSquare, ImageIcon, 
-  Video, User, LayoutGrid, Gamepad2, Headphones
+  Video, User, LayoutGrid, Gamepad2, Headphones, ShieldCheck
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
@@ -10,18 +10,32 @@ interface MobileNavProps {
   activeTool: string;
   setActiveTool: (tool: string) => void;
   isAdmin?: boolean;
+  isGuest?: boolean;
+  onBackToAdmin?: () => void;
 }
 
-export default function MobileNav({ activeTool, setActiveTool, isAdmin }: MobileNavProps) {
+export default function MobileNav({ activeTool, setActiveTool, isAdmin, isGuest, onBackToAdmin }: MobileNavProps) {
   const primaryIcons = [
     { id: 'image', icon: ImageIcon, label: 'Studio' },
     { id: 'chat', icon: MessageSquare, label: 'Chat', isCenter: true },
     { id: 'projects', icon: LayoutGrid, label: 'Tools' },
-    { id: 'profile', icon: User, label: 'Profile' },
+    { id: isGuest ? 'login' : 'profile', icon: User, label: isGuest ? 'Login' : 'Profile' },
   ];
 
   return (
-    <div className="md:hidden fixed bottom-6 left-6 right-6 z-[100]">
+    <>
+      {isAdmin && onBackToAdmin && (
+        <div className="md:hidden fixed top-4 right-4 z-[100]">
+          <button 
+            onClick={onBackToAdmin}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-full shadow-lg border border-slate-700 active:scale-95 transition-all text-xs font-bold uppercase tracking-widest"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            Admin
+          </button>
+        </div>
+      )}
+      <div className="md:hidden fixed bottom-6 left-6 right-6 z-[100]">
       <div className="bg-slate-900/90 backdrop-blur-2xl border border-white/10 rounded-[32px] p-2 flex items-center justify-between shadow-2xl shadow-black/40">
         {primaryIcons.map(item => (
           <button
@@ -63,5 +77,6 @@ export default function MobileNav({ activeTool, setActiveTool, isAdmin }: Mobile
         ))}
       </div>
     </div>
+    </>
   );
 }
